@@ -51,10 +51,12 @@ int main(void)
     printf("Server is listening on port %d.\n", PORT);
     printf("Server socket created successfully.\n");
 
+    while(1)
+    {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int client_fd;
-
+    pid_t pid;
     client_fd = accept(server_fd,
                        (struct sockaddr *)&client_addr,
                        &client_len);
@@ -67,7 +69,25 @@ int main(void)
     }
 
     printf("Client connected successfully.\n");
+    pid = fork();
 
+    if (pid == -1)
+   {
+    perror("fork");
+    close(client_fd);
+    continue;
+
+    }
+
+    if (pid == 0)
+{
+    close(server_fd);
+}
+else
+{
+    close(client_fd);
+    continue;
+}
           char buffer[256];
     ssize_t bytes_received;
 
@@ -106,10 +126,19 @@ int main(void)
     }
 
     printf("Response sent: %s", response);
-
+    
     close(client_fd);
 
-
-    return 0;
+if (pid == 0)
+{
+    exit(EXIT_SUCCESS);
 }
+
+}
+
+return 0;
+}
+
+
+    
 
