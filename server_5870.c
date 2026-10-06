@@ -20,7 +20,14 @@ char usernames[MAX_CLIENTS][100];
 int user_count = 0;
 int client_sockets[MAX_CLIENTS];
 
+#define MAX_ROOMS 10
+
+char room_names[MAX_ROOMS][100];
+int room_members[MAX_ROOMS][MAX_CLIENTS];
+int room_count = 0;
+
 pthread_mutex_t user_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 void *handle_client(void *arg);
 void *handle_client(void *arg)
@@ -188,6 +195,182 @@ if (strncmp(buffer, "PMSG ", 5) == 0)
     }
 }
 
+if (strncmp(buffer, "JOIN ", 5) == 0)
+{
+    char room[100];
+    int room_index = -1;
+
+    if (sscanf(buffer, "JOIN %99s", room) == 1)
+    {
+        pthread_mutex_lock(&user_mutex);
+
+        for (int i = 0; i < room_count; i++)
+        {
+            if (strcmp(room_names[i], room) == 0)
+            {
+                room_index = i;
+                break;
+            }
+        }
+
+        if (room_index == -1 && room_count < MAX_ROOMS)
+        {
+            room_index = room_count;
+            strcpy(room_names[room_count], room);
+
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                room_members[room_count][i] = -1;
+            }
+
+            room_count++;
+        }
+
+        if (room_index != -1)
+        {
+            int already_member = 0;
+
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                if (room_members[room_index][i] == client_fd)
+                {
+                    already_member = 1;
+                    break;
+                }
+            }
+
+            if (!already_member)
+            {
+                for (int i = 0; i < MAX_CLIENTS; i++)
+                {
+                    if (room_members[room_index][i] == -1)
+                    {
+                        room_members[room_index][i] = client_fd;
+                        break;
+                    }
+                }
+            }
+
+            snprintf(response, sizeof(response),
+                     "OK JOINED %s NID:6958\n", room);
+        }
+
+        pthread_mutex_unlock(&user_mutex);
+    }
+}
+
+if (strncmp(buffer, "ROOMS", 5) == 0)
+{
+    pthread_mutex_lock(&user_mutex);
+
+    strcpy(response, "OK ROOMS ");
+
+    for (int i = 0; i < room_count; i++)
+    {
+        strcat(response, room_names[i]);
+
+        if (i < room_count - 1)
+        {
+            strcat(response, ",");
+        }
+    }
+
+    strcat(response, " NID:6958\n");
+
+    pthread_mutex_unlock(&user_mutex);
+}
+
+if (strncmp(buffer, "LEAVE ", 6) == 0)
+{
+    char room[100];
+    int room_index = -1;
+
+    if (sscanf(buffer, "LEAVE %99s", room) == 1)
+    {
+        pthread_mutex_lock(&user_mutex);
+
+        for (int i = 0; i < room_count; i++)
+        {
+            if (strcmp(room_names[i], room) == 0)
+            {
+                room_index = i;
+                break;
+            }
+        }
+
+        if (room_index == -1)
+        {
+            strcpy(response,
+                   "ERR 003 ROOM_NOT_FOUND NID:6958\n");
+        }
+        else
+        {
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                if (room_members[room_index][i] == client_fd)
+                {
+                    room_members[room_index][i] = -1;
+                    break;
+                }
+            }
+
+            snprintf(response, sizeof(response),
+                     "OK LEFT %s NID:6958\n", room);
+        }
+
+        pthread_mutex_unlock(&user_mutex);
+    }
+}
+
+if (strncmp(buffer, "RMSG ", 5) == 0)
+{
+    char room[100];
+    char message[200];
+    char room_message[256];
+    int room_index = -1;
+
+    if (sscanf(buffer, "RMSG %99s %199[^\n]",
+               room, message) == 2)
+    {
+        pthread_mutex_lock(&user_mutex);
+
+        for (int i = 0; i < room_count; i++)
+        {
+            if (strcmp(room_names[i], room) == 0)
+            {
+                room_index = i;
+                break;
+            }
+        }
+
+        if (room_index == -1)
+        {
+            strcpy(response,
+                   "ERR 003 ROOM_NOT_FOUND NID:6958\n");
+        }
+        else
+        {
+            snprintf(room_message,
+                     sizeof(room_message),
+                     "MSG ROOM %s %s %s\n",
+                     room, registered_username, message);
+
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                if (room_members[room_index][i] != -1)
+                {
+                    send(room_members[room_index][i],
+                         room_message,
+                         strlen(room_message), 0);
+                }
+            }
+
+            strcpy(response, "OK SENT NID:6958\n");
+        }
+
+        pthread_mutex_unlock(&user_mutex);
+    }
+}
 
 if (strncmp(buffer, "BCAST ", 6) == 0)
 
