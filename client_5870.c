@@ -47,7 +47,7 @@ int main(void)
     }
 
     printf("Connected to server successfully.\n");
-      char message[] = "REGISTER Methmi\n";
+      char message[] = "REGISTER Nimal\n";
 
     if (send(client_fd, message, strlen(message), 0) == -1)
     {
@@ -95,7 +95,32 @@ if (bytes_received == -1)
 response[bytes_received] = '\0';
 
 printf("LIST response: %s", response);
+ 
+char bcast_message[] = "BCAST Hello everyone!\n";
+
+if (send(client_fd, bcast_message, strlen(bcast_message), 0) == -1)
+{
+    perror("send");
     close(client_fd);
+    exit(EXIT_FAILURE);
+}
+
+printf("BCAST command sent.\n");
+
+bytes_received = recv(client_fd, response, sizeof(response) - 1, 0);
+
+if (bytes_received == -1)
+{
+    perror("recv");
+    close(client_fd);
+    exit(EXIT_FAILURE);
+}
+
+response[bytes_received] = '\0';
+
+printf("BCAST response: %s", response);
+
+   close(client_fd);
 
  return 0;
 }

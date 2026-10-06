@@ -18,6 +18,7 @@
 
 char usernames[MAX_CLIENTS][100];
 int user_count = 0;
+int client_sockets[MAX_CLIENTS];
 
 pthread_mutex_t user_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -55,6 +56,7 @@ for (int i = 0; i < user_count; i++)
         for (int j = i; j < user_count - 1; j++)
         {
             strcpy(usernames[j], usernames[j + 1]);
+            client_sockets[j] = client_sockets[j + 1];
         }
 
         user_count--;
@@ -94,6 +96,7 @@ pthread_mutex_lock(&user_mutex);
 if (user_count < MAX_CLIENTS)
 {
     strcpy(usernames[user_count], username);
+    client_sockets[user_count] = client_fd;
     user_count++;
 }
 
@@ -120,6 +123,34 @@ if (strncmp(buffer, "LIST", 4) == 0)
     strcat(response, " NID:6958\n");
 
     pthread_mutex_unlock(&user_mutex);
+}
+
+if (strncmp(buffer, "BCAST ", 6) == 0)
+{
+    char message[200];
+    char broadcast_message[256];
+
+    strcpy(message, buffer + 6);
+
+    message[strcspn(message, "\n")] = '\0';
+
+    snprintf(broadcast_message, sizeof(broadcast_message),
+             "MSG BCAST %s %s\n", registered_username, message);
+
+    pthread_mutex_lock(&user_mutex);
+
+    for (int i = 0; i < user_count; i++)
+    {
+        if (client_sockets[i] != client_fd)
+        {
+            send(client_sockets[i], broadcast_message,
+                 strlen(broadcast_message), 0);
+        }
+    }
+
+    pthread_mutex_unlock(&user_mutex);
+
+    strcpy(response, "OK SENT NID:6958\n");
 }
 
     if (send(client_fd, response, strlen(response), 0) == -1)
