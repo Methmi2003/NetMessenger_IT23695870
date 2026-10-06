@@ -9,8 +9,67 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <errno.h>
+#include <pthread.h>
+
 #define PORT 11870
 #define BACKLOG 10
+#define MAX_CLIENTS 5
+
+char usernames[MAX_CLIENTS][100];
+int user_count = 0;
+
+void *handle_client(void *arg);
+void *handle_client(void *arg)
+{
+    int client_fd = *(int *)arg;
+    free(arg);
+
+    char buffer[256];
+    ssize_t bytes_received;
+
+    bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+
+    if (bytes_received == -1)
+    {
+        perror("recv");
+        close(client_fd);
+        return NULL;
+    }
+
+    buffer[bytes_received] = '\0';
+
+    printf("Received: %s", buffer);
+
+    char username[100];
+    char response[256];
+
+    if (sscanf(buffer, "REGISTER %99s", username) != 1)
+    {
+        snprintf(response, sizeof(response),
+                 "ERR 001 INVALID_REGISTER NID:6958\n");
+    }
+    else
+    {
+        snprintf(response, sizeof(response),
+                 "OK REGISTERED %s NID:6958\n", username);
+    }
+
+    if (send(client_fd, response, strlen(response), 0) == -1)
+    {
+        perror("send");
+        close(client_fd);
+        return NULL;
+    }
+
+    printf("Response sent: %s", response);
+
+    close(client_fd);
+
+    return NULL;
+}
+
+
 
 int main(void)
 {
@@ -56,7 +115,7 @@ int main(void)
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int client_fd;
-    pid_t pid;
+    
     client_fd = accept(server_fd,
                        (struct sockaddr *)&client_addr,
                        &client_len);
@@ -69,71 +128,21 @@ int main(void)
     }
 
     printf("Client connected successfully.\n");
-    pid = fork();
+   int *client_socket = malloc(sizeof(int));
+*client_socket = client_fd;
 
-    if (pid == -1)
-   {
-    perror("fork");
-    close(client_fd);
-    continue;
+pthread_t thread;
 
-    }
-
-    if (pid == 0)
+if (pthread_create(&thread, NULL, handle_client, client_socket) != 0)
 {
-    close(server_fd);
-}
-else
-{
+    perror("pthread_create");
     close(client_fd);
+    free(client_socket);
     continue;
 }
-          char buffer[256];
-    ssize_t bytes_received;
 
-    bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-
-    if (bytes_received == -1)
-    {
-        perror("recv");
-        close(client_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    buffer[bytes_received] = '\0';
-
-    printf("Received: %s", buffer);
-
-    char username[100];
-    char response[256];
-
-    if (sscanf(buffer, "REGISTER %99s", username) != 1)
-    {
-        snprintf(response, sizeof(response),
-                 "ERR 001 INVALID_REGISTER NID:6958\n");
-    }
-    else
-    {
-        snprintf(response, sizeof(response),
-                 "OK REGISTERED %s NID:6958\n", username);
-    }
-
-    if (send(client_fd, response, strlen(response), 0) == -1)
-    {
-        perror("send");
-        close(client_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Response sent: %s", response);
-    
-    close(client_fd);
-
-if (pid == 0)
-{
-    exit(EXIT_SUCCESS);
-}
-
+pthread_detach(thread);
+       
 }
 
 return 0;
