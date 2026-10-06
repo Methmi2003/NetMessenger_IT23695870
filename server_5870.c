@@ -19,14 +19,21 @@
 char usernames[MAX_CLIENTS][100];
 int user_count = 0;
 
+pthread_mutex_t user_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void *handle_client(void *arg);
 void *handle_client(void *arg)
 {
     int client_fd = *(int *)arg;
     free(arg);
 
+
     char buffer[256];
     ssize_t bytes_received;
+    char registered_username[100] = "";
+
+   while(1)
+{
 
     bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
 
@@ -37,10 +44,38 @@ void *handle_client(void *arg)
         return NULL;
     }
 
+    if (bytes_received == 0)
+{
+pthread_mutex_lock(&user_mutex);
+
+for (int i = 0; i < user_count; i++)
+{
+    if (strcmp(usernames[i], registered_username) == 0)
+    {
+        for (int j = i; j < user_count - 1; j++)
+        {
+            strcpy(usernames[j], usernames[j + 1]);
+        }
+
+        user_count--;
+        break;
+    }
+}
+
+pthread_mutex_unlock(&user_mutex);
+
+
+
+
+    close(client_fd);
+    return NULL;
+
+}
     buffer[bytes_received] = '\0';
 
     printf("Received: %s", buffer);
 
+    
     char username[100];
     char response[256];
 
@@ -53,7 +88,39 @@ void *handle_client(void *arg)
     {
         snprintf(response, sizeof(response),
                  "OK REGISTERED %s NID:6958\n", username);
+
+
+pthread_mutex_lock(&user_mutex);
+if (user_count < MAX_CLIENTS)
+{
+    strcpy(usernames[user_count], username);
+    user_count++;
+}
+
+strcpy(registered_username, username);
+
+pthread_mutex_unlock(&user_mutex);
     }
+if (strncmp(buffer, "LIST", 4) == 0)
+{
+    pthread_mutex_lock(&user_mutex);
+
+    strcpy(response, "OK USERS ");
+
+    for (int i = 0; i < user_count; i++)
+    {
+        strcat(response, usernames[i]);
+
+        if (i < user_count - 1)
+        {
+            strcat(response, ",");
+        }
+    }
+
+    strcat(response, " NID:6958\n");
+
+    pthread_mutex_unlock(&user_mutex);
+}
 
     if (send(client_fd, response, strlen(response), 0) == -1)
     {
@@ -64,7 +131,7 @@ void *handle_client(void *arg)
 
     printf("Response sent: %s", response);
 
-    close(client_fd);
+   }
 
     return NULL;
 }

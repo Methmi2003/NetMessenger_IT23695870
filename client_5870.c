@@ -72,7 +72,29 @@ int main(void)
     response[bytes_received] = '\0';
 
     printf("Server response: %s", response);
+    char list_message[] = "LIST\n";
 
+if (send(client_fd, list_message, strlen(list_message), 0) == -1)
+{
+    perror("send");
+    close(client_fd);
+    exit(EXIT_FAILURE);
+}
+
+printf("LIST command sent.\n");
+
+bytes_received = recv(client_fd, response, sizeof(response) - 1, 0);
+
+if (bytes_received == -1)
+{
+    perror("recv");
+    close(client_fd);
+    exit(EXIT_FAILURE);
+}
+
+response[bytes_received] = '\0';
+
+printf("LIST response: %s", response);
     close(client_fd);
 
  return 0;
