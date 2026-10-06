@@ -145,7 +145,54 @@ if (strncmp(buffer, "LIST", 4) == 0)
     pthread_mutex_unlock(&user_mutex);
 }
 
+if (strncmp(buffer, "PMSG ", 5) == 0)
+{
+    char target_username[100];
+    char message[200];
+    char private_message[256];
+    int target_fd = -1;
+
+    if (sscanf(buffer, "PMSG %99s %199[^\n]",
+               target_username, message) == 2)
+    {
+        pthread_mutex_lock(&user_mutex);
+
+        for (int i = 0; i < user_count; i++)
+        {
+            if (strcmp(usernames[i], target_username) == 0)
+            {
+                target_fd = client_sockets[i];
+                break;
+            }
+        }
+
+        pthread_mutex_unlock(&user_mutex);
+
+        if (target_fd == -1)
+        {
+            strcpy(response,
+                   "ERR 002 USER_NOT_FOUND NID:6958\n");
+        }
+        else
+        {
+            snprintf(private_message,
+                     sizeof(private_message),
+                     "MSG PRIV %s %s\n",
+                     registered_username, message);
+
+            send(target_fd, private_message,
+                 strlen(private_message), 0);
+
+            strcpy(response, "OK SENT NID:6958\n");
+        }
+    }
+}
+
+
 if (strncmp(buffer, "BCAST ", 6) == 0)
+
+
+
 {
     char message[200];
     char broadcast_message[256];
