@@ -88,19 +88,39 @@ pthread_mutex_unlock(&user_mutex);
     }
     else
     {
-        snprintf(response, sizeof(response),
-                 "OK REGISTERED %s NID:6958\n", username);
 
+
+int username_taken = 0;
 
 pthread_mutex_lock(&user_mutex);
-if (user_count < MAX_CLIENTS)
+
+for (int i = 0; i < user_count; i++)
 {
-    strcpy(usernames[user_count], username);
-    client_sockets[user_count] = client_fd;
-    user_count++;
+    if (strcmp(usernames[i], username) == 0)
+    {
+        username_taken = 1;
+        break;
+    }
 }
 
-strcpy(registered_username, username);
+if (username_taken)
+{
+    strcpy(response, "ERR 001 USERNAME_TAKEN NID:6958\n");
+}
+else
+{
+    snprintf(response, sizeof(response),
+             "OK REGISTERED %s NID:6958\n", username);
+
+    if (user_count < MAX_CLIENTS)
+    {
+        strcpy(usernames[user_count], username);
+        client_sockets[user_count] = client_fd;
+        user_count++;
+    }
+
+    strcpy(registered_username, username);
+}
 
 pthread_mutex_unlock(&user_mutex);
     }
@@ -118,7 +138,7 @@ if (strncmp(buffer, "LIST", 4) == 0)
         {
             strcat(response, ",");
         }
-    }
+ }
 
     strcat(response, " NID:6958\n");
 
