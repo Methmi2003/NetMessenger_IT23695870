@@ -47,7 +47,13 @@ int main(void)
     }
 
     printf("Connected to server successfully.\n");
-      char message[] = "REGISTER Nimal\n";
+      char username[100];
+char message[150];
+
+printf("Enter username: ");
+scanf("%99s", username);
+
+snprintf(message, sizeof(message), "REGISTER %s\n", username);
 
     if (send(client_fd, message, strlen(message), 0) == -1)
     {
@@ -72,55 +78,76 @@ int main(void)
     response[bytes_received] = '\0';
 
     printf("Server response: %s", response);
-    char list_message[] = "LIST\n";
+  int c;
+while ((c = getchar()) != '\n' && c != EOF)
+    ;
 
-if (send(client_fd, list_message, strlen(list_message), 0) == -1)
+char command[1024];
+
+while (1)
 {
-    perror("send");
-    close(client_fd);
-    exit(EXIT_FAILURE);
-}
+     fd_set readfds;
 
-printf("LIST command sent.\n");
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds);
+    FD_SET(client_fd, &readfds);
 
-bytes_received = recv(client_fd, response, sizeof(response) - 1, 0);
+    int max_fd = client_fd;
 
-if (bytes_received == -1)
-{
-    perror("recv");
-    close(client_fd);
-    exit(EXIT_FAILURE);
-}
+    printf("> ");
+    fflush(stdout);
 
-response[bytes_received] = '\0';
+    if (select(max_fd + 1, &readfds, NULL, NULL, NULL) == -1)
+    {
+        perror("select");
+        break;
+    }
 
-printf("LIST response: %s", response);
- 
-char bcast_message[] = "BCAST Hello everyone!\n";
+    if (FD_ISSET(client_fd, &readfds))
+    {
+        bytes_received = recv(client_fd, response,
+                              sizeof(response) - 1, 0);
 
-if (send(client_fd, bcast_message, strlen(bcast_message), 0) == -1)
-{
-    perror("send");
-    close(client_fd);
-    exit(EXIT_FAILURE);
-}
+        if (bytes_received <= 0)
+            break;
 
-printf("BCAST command sent.\n");
+        response[bytes_received] = '\0';
+        printf("\n%s", response);
+    }
 
-bytes_received = recv(client_fd, response, sizeof(response) - 1, 0);
+    if (FD_ISSET(STDIN_FILENO, &readfds))
+    {
+        if (fgets(command, sizeof(command), stdin) == NULL)
+            break;
 
-if (bytes_received == -1)
-{
-    perror("recv");
-    close(client_fd);
-    exit(EXIT_FAILURE);
-}
+        command[strcspn(command, "\n")] = '\0';
 
-response[bytes_received] = '\0';
+        if (strlen(command) == 0)
+            continue;
 
-printf("BCAST response: %s", response);
+        strcat(command, "\n");
 
-   close(client_fd);
+        if (send(client_fd, command, strlen(command), 0) == -1)
+        {
+            perror("send");
+            break;
+        }
+
+        if (strncmp(command, "QUIT", 4) == 0)
+        {
+            bytes_received = recv(client_fd, response,
+                                  sizeof(response) - 1, 0);
+
+            if (bytes_received > 0)
+            {
+                response[bytes_received] = '\0';
+                printf("%s", response);
+            }
+
+            break;
+        }
+    }
+} 
 
  return 0;
 }

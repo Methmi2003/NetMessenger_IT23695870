@@ -21,6 +21,8 @@ char usernames[MAX_CLIENTS][100];
 int user_count = 0;
 int client_sockets[MAX_CLIENTS];
 
+int client_number = 0;
+
 #define MAX_ROOMS 10
 
 char room_names[MAX_ROOMS][100];
@@ -614,7 +616,8 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
-    printf("Client connected successfully.\n");
+    client_number++;
+printf("Client %d connected successfully.\n", client_number);
    int *client_socket = malloc(sizeof(int));
 *client_socket = client_fd;
 
