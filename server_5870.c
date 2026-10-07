@@ -135,7 +135,11 @@ pthread_mutex_unlock(&user_mutex);
     char username[100];
     char response[256];
 
-    if (strncmp(buffer, "REGISTER ", 9) == 0 && sscanf(buffer, "REGISTER %99s", username) != 1)
+  if (strncmp(buffer, "REGISTER ", 9) == 0)
+{
+
+printf("DEBUG REGISTER: [%s] sscanf=%d\n", buffer, sscanf(buffer, "REGISTER %99s", username));
+    if (sscanf(buffer, "REGISTER %99s", username) != 1)
     {
         snprintf(response, sizeof(response),
                  "ERR 001 INVALID_REGISTER NID:6958\n");
@@ -178,6 +182,37 @@ else
 
 pthread_mutex_unlock(&user_mutex);
     }
+    }
+
+if (strcmp(buffer, "QUIT\n") == 0 || strcmp(buffer, "QUIT") == 0)
+{
+    strcpy(response, "OK BYE NID:6958\n");
+
+    send(client_fd, response, strlen(response), 0);
+
+    pthread_mutex_lock(&user_mutex);
+
+    for (int i = 0; i < user_count; i++)
+    {
+        if (client_sockets[i] == client_fd)
+        {
+            for (int j = i; j < user_count - 1; j++)
+            {
+                strcpy(usernames[j], usernames[j + 1]);
+                client_sockets[j] = client_sockets[j + 1];
+            }
+
+            user_count--;
+            break;
+        }
+    }
+
+    pthread_mutex_unlock(&user_mutex);
+
+    close(client_fd);
+    return NULL;
+}
+
 if (strncmp(buffer, "LIST", 4) == 0)
 {
     pthread_mutex_lock(&user_mutex);
