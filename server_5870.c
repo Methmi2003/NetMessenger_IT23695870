@@ -11,6 +11,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <sys/stat.h>
 
 #define PORT 11870
 #define BACKLOG 10
@@ -28,6 +29,50 @@ int room_count = 0;
 
 pthread_mutex_t user_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+int recv_line(int fd, char *buffer, int size)
+{
+    int i = 0;
+    char ch;
+
+    while (i < size - 1)
+    {
+        int n = recv(fd, &ch, 1, 0);
+
+        if (n <= 0)
+        {
+            return n;
+        }
+
+        buffer[i++] = ch;
+
+        if (ch == '\n')
+        {
+            break;
+        }
+    }
+
+    buffer[i] = '\0';
+    return i;
+}
+
+int recv_all(int fd, char *buffer, int size)
+{
+    int total = 0;
+
+    while (total < size)
+    {
+        int n = recv(fd, buffer + total, size - total, 0);
+
+        if (n <= 0)
+        {
+            return n;
+        }
+
+        total += n;
+    }
+
+    return total;
+}
 
 void *handle_client(void *arg);
 void *handle_client(void *arg)
@@ -43,7 +88,7 @@ void *handle_client(void *arg)
    while(1)
 {
 
-    bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+   bytes_received = recv_line(client_fd, buffer, sizeof(buffer));
 
     if (bytes_received == -1)
     {
@@ -88,7 +133,7 @@ pthread_mutex_unlock(&user_mutex);
     char username[100];
     char response[256];
 
-    if (sscanf(buffer, "REGISTER %99s", username) != 1)
+    if (strncmp(buffer, "REGISTER ", 9) == 0 && sscanf(buffer, "REGISTER %99s", username) != 1)
     {
         snprintf(response, sizeof(response),
                  "ERR 001 INVALID_REGISTER NID:6958\n");
@@ -403,6 +448,100 @@ if (strncmp(buffer, "BCAST ", 6) == 0)
     strcpy(response, "OK SENT NID:6958\n");
 }
 
+if (strncmp(buffer, "SENDFILE ", 9) == 0)
+{
+    char target[100];
+    char filename[100];
+    int filesize;
+
+    if (sscanf(buffer, "SENDFILE %99s %99s %d\n",
+               target, filename, &filesize) == 3)
+    {
+        if (filesize > 1048576)
+        {
+            strcpy(response,
+                   "ERR 004 FILE_TOO_LARGE NID:6958\n");
+        }
+        else
+        {
+            int target_fd = -1;
+
+            pthread_mutex_lock(&user_mutex);
+
+            for (int i = 0; i < user_count; i++)
+            {
+                if (strcmp(usernames[i], target) == 0)
+                {
+                    target_fd = client_sockets[i];
+                    break;
+                }
+            }
+
+            pthread_mutex_unlock(&user_mutex);
+
+            if (target_fd == -1)
+            {
+                strcpy(response,
+                       "ERR 002 USER_NOT_FOUND NID:6958\n");
+            }
+            else
+            {
+                char *file_data = malloc(filesize);
+
+                if (file_data == NULL)
+                {
+                    strcpy(response,
+                           "ERR 004 FILE_TOO_LARGE NID:6958\n");
+                }
+                else
+                {
+                    int received = recv_all(client_fd,
+                                            file_data,
+                                            filesize);
+
+                    if (received == filesize)
+                    {
+
+                        char sender_dir[256];
+char file_path[512];
+
+snprintf(sender_dir, sizeof(sender_dir),
+         "storage/IT23695870/%s",
+         registered_username);
+
+mkdir("storage/IT23695870", 0777);
+mkdir(sender_dir, 0777);
+
+snprintf(file_path, sizeof(file_path),
+         "%s/%s",
+         sender_dir, filename);
+
+FILE *fp = fopen(file_path, "wb");
+
+if (fp != NULL)
+{
+    fwrite(file_data, 1, filesize, fp);
+    fclose(fp);
+}
+                        send(target_fd, file_data, filesize, 0);
+
+                        strcpy(response,
+                               "OK FILE_RECEIVED ");
+                        strcat(response, filename);
+                        strcat(response, " NID:6958\n");
+                    }
+
+                    free(file_data);
+                }
+            }
+        }
+    }
+    else
+    {
+        strcpy(response,
+               "ERR 001 INVALID_SENDFILE NID:6958\n");
+    }
+}
     if (send(client_fd, response, strlen(response), 0) == -1)
     {
         perror("send");
