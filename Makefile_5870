@@ -1,0 +1,13 @@
+CC = gcc
+CFLAGS = -Wall -Wextra -pthread
+
+all: server_5870 client_5870
+
+server_5870: server_5870.c
+	$(CC) $(CFLAGS) server_5870.c -o server_5870
+
+client_5870: client_5870.c
+	$(CC) $(CFLAGS) client_5870.c -o client_5870
+
+clean:
+	rm -f server_5870 client_5870

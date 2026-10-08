@@ -118,6 +118,37 @@ for (int i = 0; i < user_count; i++)
     }
 }
 
+/* Remove disconnected client from all rooms */
+for (int r = 0; r < room_count; r++)
+{
+    for (int m = 0; m < MAX_CLIENTS; m++)
+    {
+        if (room_members[r][m] == client_fd)
+        {
+            room_members[r][m] = -1;
+        }
+    }
+}
+
+/* Notify remaining clients about the disconnect */
+if (registered_username[0] != '\0')
+{
+    char leave_message[256];
+
+    snprintf(leave_message, sizeof(leave_message),
+             "MSG LEAVE %s\n", registered_username);
+
+    for (int j = 0; j < user_count; j++)
+    {
+        send(client_sockets[j],
+             leave_message,
+             strlen(leave_message),
+             0);
+    }
+}
+
+
+
 pthread_mutex_unlock(&user_mutex);
 
 
@@ -178,6 +209,24 @@ else
     }
 
     strcpy(registered_username, username);
+
+        char join_message[150];
+
+        snprintf(join_message, sizeof(join_message),
+                 "MSG JOIN %s\n", registered_username);
+
+        for (int i = 0; i < user_count; i++)
+        {
+            if (client_sockets[i] != client_fd)
+            {
+                send(client_sockets[i],
+                     join_message,
+                     strlen(join_message),
+                     0);
+            }
+        }
+
+
 }
 
 pthread_mutex_unlock(&user_mutex);
@@ -396,6 +445,23 @@ if (strncmp(buffer, "LEAVE ", 6) == 0)
                 }
             }
 
+
+           char leave_message[256];
+
+snprintf(leave_message, sizeof(leave_message),
+         "MSG LEAVE %s\n", registered_username);
+
+for (int j = 0; j < user_count; j++)
+{
+    if (client_sockets[j] != client_fd)
+    {
+        send(client_sockets[j],
+             leave_message,
+             strlen(leave_message),
+             0);
+    }
+} 
+
             snprintf(response, sizeof(response),
                      "OK LEFT %s NID:6958\n", room);
         }
@@ -471,6 +537,7 @@ if (strncmp(buffer, "BCAST ", 6) == 0)
 
     pthread_mutex_lock(&user_mutex);
 
+
     for (int i = 0; i < user_count; i++)
     {
         if (client_sockets[i] != client_fd)
@@ -502,7 +569,7 @@ if (strncmp(buffer, "SENDFILE ", 9) == 0)
         else
         {
             int target_fd = -1;
-
+            int room_index = -1;
             pthread_mutex_lock(&user_mutex);
 
             for (int i = 0; i < user_count; i++)
@@ -515,8 +582,20 @@ if (strncmp(buffer, "SENDFILE ", 9) == 0)
             }
 
             pthread_mutex_unlock(&user_mutex);
-
+            
             if (target_fd == -1)
+{
+    for (int i = 0; i < room_count; i++)
+    {
+        if (strcmp(room_names[i], target) == 0)
+        {
+            room_index = i;
+            break;
+        }
+    }
+}
+         
+            if (target_fd == -1 && room_index == -1)
             {
                 strcpy(response,
                        "ERR 002 USER_NOT_FOUND NID:6958\n");
@@ -560,7 +639,27 @@ if (fp != NULL)
     fwrite(file_data, 1, filesize, fp);
     fclose(fp);
 }
-                        send(target_fd, file_data, filesize, 0);
+                        if (target_fd != -1)
+{
+    send(target_fd, file_data, filesize, 0);
+}
+else if (room_index != -1)
+{
+    pthread_mutex_lock(&user_mutex);
+
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (room_members[room_index][i] != -1)
+        {
+            send(room_members[room_index][i],
+                 file_data,
+                 filesize,
+                 0);
+        }
+    }
+
+    pthread_mutex_unlock(&user_mutex);
+}
 
                         strcpy(response,
                                "OK FILE_RECEIVED ");

@@ -11,6 +11,24 @@
 
 #define PORT 11870
 
+
+int send_all(int fd, const char *buffer, int size)
+{
+    int total = 0;
+
+    while (total < size)
+    {
+        int n = send(fd, buffer + total, size - total, 0);
+
+        if (n <= 0)
+            return -1;
+
+        total += n;
+    }
+
+    return total;
+}
+
 int main(void)
 {
     int client_fd;
@@ -121,6 +139,83 @@ while (1)
             break;
 
         command[strcspn(command, "\n")] = '\0';
+           
+        if (strncmp(command, "SENDFILE ", 9) == 0)
+{
+    char target[100];
+    char filename[100];
+
+    if (sscanf(command, "SENDFILE %99s %99s", target, filename) == 2)
+    {
+        FILE *file = fopen(filename, "rb");
+
+        if (file == NULL)
+        {
+            perror("fopen");
+            continue;
+        }
+
+        fseek(file, 0, SEEK_END);
+        long filesize = ftell(file);
+        fseek(file, 0, SEEK_SET);
+
+
+
+        printf("File size: %ld bytes\n", filesize);
+
+char send_command[300];
+
+snprintf(send_command, sizeof(send_command),
+         "SENDFILE %s %s %ld\n",
+         target, filename, filesize);
+
+if (send(client_fd, send_command, strlen(send_command), 0) == -1)
+{
+    perror("send");
+    fclose(file);
+    break;
+}
+
+fseek(file, 0, SEEK_SET);
+
+char *file_data = malloc(filesize);
+
+if (file_data == NULL)
+{
+    printf("Memory allocation failed.\n");
+    fclose(file);
+    continue;
+}
+
+size_t bytes_read = fread(file_data, 1, filesize, file);
+
+if (bytes_read != filesize)
+{
+    printf("File read failed.\n");
+    free(file_data);
+    fclose(file);
+    continue;
+}
+
+if (send_all(client_fd, file_data, filesize) == -1)
+{
+    perror("send file");
+    free(file_data);
+    fclose(file);
+    break;
+}
+
+free(file_data);
+
+printf("File sent: %s (%ld bytes)\n", filename, filesize);
+
+fclose(file);
+
+continue;
+
+        fclose(file);
+    }
+}          
 
         if (strlen(command) == 0)
             continue;
