@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -30,6 +31,36 @@ int room_members[MAX_ROOMS][MAX_CLIENTS];
 int room_count = 0;
 
 pthread_mutex_t user_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void write_log(const char *event)
+{
+    FILE *log_file = fopen("netmsg_IT23695870.log", "a");
+
+    if (log_file == NULL)
+    {
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm *local_time = localtime(&now);
+
+    pthread_mutex_lock(&log_mutex);
+
+    fprintf(log_file,
+            "[%04d-%02d-%02d %02d:%02d:%02d] %s\n",
+            local_time->tm_year + 1900,
+            local_time->tm_mon + 1,
+            local_time->tm_mday,
+            local_time->tm_hour,
+            local_time->tm_min,
+            local_time->tm_sec,
+            event);
+
+    fclose(log_file);
+
+    pthread_mutex_unlock(&log_mutex);
+}
 
 int recv_line(int fd, char *buffer, int size)
 {
@@ -209,7 +240,12 @@ else
     }
 
     strcpy(registered_username, username);
+    char log_event[256];
 
+snprintf(log_event, sizeof(log_event),
+         "User registered: %s", username);
+
+write_log(log_event);
         char join_message[150];
 
         snprintf(join_message, sizeof(join_message),
@@ -238,7 +274,13 @@ if (strcmp(buffer, "QUIT\n") == 0 || strcmp(buffer, "QUIT") == 0)
     strcpy(response, "OK BYE NID:6958\n");
 
     send(client_fd, response, strlen(response), 0);
+    char log_event[256];
 
+snprintf(log_event, sizeof(log_event),
+         "Client requested disconnect: %s",
+         registered_username);
+
+write_log(log_event);
     pthread_mutex_lock(&user_mutex);
 
     for (int i = 0; i < user_count; i++)
@@ -321,6 +363,14 @@ if (strncmp(buffer, "PMSG ", 5) == 0)
             send(target_fd, private_message,
                  strlen(private_message), 0);
 
+            char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "Private message: %s -> %s",
+         registered_username, target_username);
+
+write_log(log_event);
+
             strcpy(response, "OK SENT NID:6958\n");
         }
     }
@@ -385,6 +435,14 @@ if (strncmp(buffer, "JOIN ", 5) == 0)
             snprintf(response, sizeof(response),
                      "OK JOINED %s NID:6958\n", room);
         }
+
+        char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "User joined room: %s - %s",
+         registered_username, room);
+
+write_log(log_event);
 
         pthread_mutex_unlock(&user_mutex);
     }
@@ -462,6 +520,14 @@ for (int j = 0; j < user_count; j++)
     }
 } 
 
+          char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "User left room: %s - %s",
+         registered_username, room);
+
+write_log(log_event);
+
             snprintf(response, sizeof(response),
                      "OK LEFT %s NID:6958\n", room);
         }
@@ -515,6 +581,14 @@ if (strncmp(buffer, "RMSG ", 5) == 0)
 
             strcpy(response, "OK SENT NID:6958\n");
         }
+        
+       char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "Room message: %s -> %s",
+         registered_username, room);
+
+       write_log(log_event);
 
         pthread_mutex_unlock(&user_mutex);
     }
@@ -546,6 +620,13 @@ if (strncmp(buffer, "BCAST ", 6) == 0)
                  strlen(broadcast_message), 0);
         }
     }
+
+   char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "Broadcast message by: %s", registered_username);
+
+write_log(log_event); 
 
     pthread_mutex_unlock(&user_mutex);
 
@@ -666,6 +747,14 @@ else if (room_index != -1)
                         strcat(response, filename);
                         strcat(response, " NID:6958\n");
                     }
+ 
+                    char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "File transfer: %s - %s",
+         registered_username, filename);
+
+write_log(log_event);
 
                     free(file_data);
                 }
@@ -750,6 +839,7 @@ int main(void)
         exit(EXIT_FAILURE);
     }
 
+    write_log("Client connected");
     client_number++;
 printf("Client %d connected successfully.\n", client_number);
    int *client_socket = malloc(sizeof(int));
