@@ -126,12 +126,21 @@ void *handle_client(void *arg)
     if (bytes_received == -1)
     {
         perror("recv");
-        close(client_fd);
-        return NULL;
+
     }
 
-    if (bytes_received == 0)
+    if (bytes_received <= 0)
 {
+
+char log_event[256];
+
+snprintf(log_event, sizeof(log_event),
+         "Unexpected disconnect: %s",
+         registered_username[0] != '\0'
+             ? registered_username
+             : "unregistered client");
+
+write_log(log_event);
 pthread_mutex_lock(&user_mutex);
 
 for (int i = 0; i < user_count; i++)
@@ -196,6 +205,7 @@ pthread_mutex_unlock(&user_mutex);
     
     char username[100];
     char response[256];
+    strcpy(response, "ERR 001 INVALID_COMMAND NID:6958\n");  
 
   if (strncmp(buffer, "REGISTER ", 9) == 0)
 {
@@ -582,15 +592,18 @@ if (strncmp(buffer, "RMSG ", 5) == 0)
             strcpy(response, "OK SENT NID:6958\n");
         }
         
-       char log_event[256];
+       if (room_index != -1)
+{
+    char log_event[256];
 
-snprintf(log_event, sizeof(log_event),
-         "Room message: %s -> %s",
-         registered_username, room);
+    snprintf(log_event, sizeof(log_event),
+             "Room message: %s -> %s",
+             registered_username, room);
 
-       write_log(log_event);
+    write_log(log_event);
+}
 
-        pthread_mutex_unlock(&user_mutex);
+pthread_mutex_unlock(&user_mutex);
     }
 }
 
